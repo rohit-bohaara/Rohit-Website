@@ -15,7 +15,7 @@
     whatsapp: '917990089139',   // digits only, with country code
     instagram: 'https://www.instagram.com/igthorsir',
 
-    // Sound. Leave soundFile empty to use the built-in ambient tone, or add your
+    // Sound. Leave soundFile empty to use the built-in soft piano, or add your
     // own music file (e.g. 'assets/audio/ambient.mp3') and it loops instead.
     soundFile: '',
     soundVolume: 0.5,     // 0 to 1
@@ -414,7 +414,7 @@
   const Sound = (() => {
     const AC = window.AudioContext || window.webkitAudioContext;
     const toggles = $$('[data-sound-toggle]');
-    let ctx = null, master = null, music = null, on = false;
+    let ctx = null, master = null, bus = null, music = null, on = false;
     const level = () => clamp(CONFIG.soundVolume, 0, 1);
 
     function build() {
@@ -428,18 +428,50 @@
       master.gain.value = 0;
       master.connect(ctx.destination);
       if (CONFIG.soundFile) return;
-      // Ambient tone: a low open fifth through a slowly breathing filter.
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass'; filter.frequency.value = 520; filter.Q.value = 0.6;
-      filter.connect(master);
-      [[55, 0.5, 'sine'], [82.41, 0.3, 'sine'], [110, 0.2, 'triangle'], [164.81, 0.1, 'triangle'], [220.6, 0.05, 'triangle']].forEach(([f, g, type], i) => {
-        const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = f; osc.detune.value = i % 2 ? 6 : -6;
-        const gain = ctx.createGain(); gain.gain.value = g;
-        osc.connect(gain); gain.connect(filter); osc.start();
+      // Soft piano: sparse notes chosen at random from one gentle scale, so the
+      // phrase never repeats, with a quiet echo behind them.
+      bus = ctx.createGain();
+      bus.connect(master);
+      const echo = ctx.createDelay(1); echo.delayTime.value = 0.44;
+      const damp = ctx.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = 1700;
+      const feedback = ctx.createGain(); feedback.gain.value = 0.36;
+      const wet = ctx.createGain(); wet.gain.value = 0.32;
+      bus.connect(echo); echo.connect(damp); damp.connect(feedback); feedback.connect(echo);
+      damp.connect(wet); wet.connect(master);
+    }
+
+    const HIGH = [293.66, 329.63, 369.99, 440, 493.88, 587.33, 659.25];
+    const LOW = [73.42, 98, 110, 123.47];
+    let lastNote = -1, beat = 0, timer = null;
+
+    function note(freq, when, velocity) {
+      const out = ctx.createGain();
+      out.gain.setValueAtTime(0.0001, when);
+      out.gain.linearRampToValueAtTime(velocity, when + 0.012);
+      out.gain.exponentialRampToValueAtTime(0.0001, when + 4.5);
+      const tone = ctx.createBiquadFilter(); tone.type = 'lowpass';
+      tone.frequency.setValueAtTime(2600, when);
+      tone.frequency.exponentialRampToValueAtTime(480, when + 2.5);
+      [[1, 1], [2, 0.28], [3, 0.1], [4.02, 0.04]].forEach(([multiple, gain]) => {
+        const osc = ctx.createOscillator(); osc.frequency.value = freq * multiple;
+        const g = ctx.createGain(); g.gain.value = gain;
+        osc.connect(g); g.connect(tone); osc.start(when); osc.stop(when + 4.6);
       });
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06;
-      const depth = ctx.createGain(); depth.gain.value = 240;
-      lfo.connect(depth); depth.connect(filter.frequency); lfo.start();
+      tone.connect(out); out.connect(bus);
+    }
+
+    function play() {
+      timer = null;
+      if (!on || !bus || document.hidden) return;
+      const when = ctx.currentTime + 0.05;
+      let i;
+      do { i = Math.floor(Math.random() * HIGH.length); } while (i === lastNote);
+      lastNote = i;
+      note(HIGH[i], when, 0.14 + Math.random() * 0.06);
+      if (Math.random() < 0.3) note(HIGH[(i + 2) % HIGH.length], when + 0.28, 0.1);
+      if (beat % 4 === 0) note(LOW[Math.floor(Math.random() * LOW.length)], when, 0.2);
+      beat++;
+      timer = setTimeout(play, 1700 + Math.random() * 2100);
     }
 
     function set(state) {
@@ -448,7 +480,8 @@
       if (ctx) {
         if (on) ctx.resume();
         master.gain.cancelScheduledValues(ctx.currentTime);
-        master.gain.setTargetAtTime(on ? level() * 0.3 : 0, ctx.currentTime, on ? 1.2 : 0.25);
+        master.gain.setTargetAtTime(on ? level() : 0, ctx.currentTime, on ? 0.6 : 0.25);
+        if (on && bus && !timer) play();
       }
       if (music) {
         if (on) { music.volume = level(); music.play().catch(() => {}); } else music.pause();
@@ -476,7 +509,7 @@
     document.addEventListener('visibilitychange', () => {
       if (!on) return;
       if (document.hidden) { if (ctx) ctx.suspend(); if (music) music.pause(); }
-      else { if (ctx) ctx.resume(); if (music) music.play().catch(() => {}); }
+      else { if (ctx) ctx.resume(); if (music) music.play().catch(() => {}); if (bus && !timer) play(); }
     });
     return { set, click };
   })();
