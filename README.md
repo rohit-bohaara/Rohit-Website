@@ -1,22 +1,10 @@
-# Responsive Portfolio Website 
+# Thor Photography
 
-Website Using HTML, CSS, SCSS and JavaScript, with a wonderful user interface.
+Portfolio site for Thor Photography: portraits, events and cinematic film from Mumbai.
 
-## Website contains: 
+Live at https://www.rohitbohara.com.np
 
-- Home
-- About Me
-- Skills
-- Qualification
-- Portfolio
-- Contact
+Static site: `index.html`, `style.css`, `script.js` and `assets/`. Uses GSAP, ScrollTrigger and Lenis from a CDN.
+Contact details, the gallery list and sound settings are in the config block at the top of `script.js`.
 
-<div align="center">
-<a href="https://rohit-bohaara.github.io/Rohit-Website/"><strong>➥ Live Demo</strong></a>
-
-<p align="center"><b>If you found the code useful, please feel free to fork it and modify it as you see fit.</p? <br>
-</div>
-
-
-
-<p align="center"><b>© Created by Rohit Bohara</b></p?
+The previous portfolio is kept on the `old-portfolio` branch.
